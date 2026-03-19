@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import './index.css';
 
 const API_KEY = 'trilogy';
@@ -38,7 +38,7 @@ async function fetchTrending() {
 // Shimmer loading placeholder grid
 function Skeleton() {
   return (
-    <div className="loading-grid">
+    <div className="loading-grid" aria-label="Loading movies">
       {Array.from({length: 12}).map((_, i) => (
         <div key={i} className="skeleton-card">
           <div className="skeleton-poster" />
@@ -58,14 +58,19 @@ function MovieCard({ movie, onClick }) {
   const type = movie.Type || 'movie';
 
   return (
-    <div className="movie-card" onClick={() => onClick(movie.imdbID)}>
+    <div className="movie-card" onClick={() => onClick(movie.imdbID || movie.id)}>
       <div className="movie-card-poster">
         {hasPoster ? (
           <img src={movie.Poster} alt={movie.Title} loading="lazy" />
         ) : (
-          <div className="poster-placeholder">🎬<span>{movie.Title}</span></div>
+          <div className="poster-placeholder">
+            🎬
+            <span>{movie.Title}</span>
+          </div>
         )}
-        <div className="poster-overlay"><div className="play-btn">▶</div></div>
+        <div className="poster-overlay">
+          <div className="play-btn">▶</div>
+        </div>
         {movie.Year && <div className="movie-year-badge">{movie.Year?.replace(/–.*/, '')}</div>}
         {type && type !== 'N/A' && (
           <div className="movie-type-badge">{type === 'series' ? 'TV' : type === 'episode' ? 'Ep' : 'Film'}</div>
@@ -84,6 +89,90 @@ function MovieCard({ movie, onClick }) {
   );
 }
 
+// Movie detail modal — fetches full info by ID
+function MovieModal({ id, onClose }) {
+  const [movie, setMovie] = useState(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    setLoading(true);
+    fetchById(id).then(d => { setMovie(d); setLoading(false); });
+  }, [id]);
+
+  // Close when clicking outside the modal box
+  const handleOverlayClick = (e) => { if (e.target === e.currentTarget) onClose(); };
+
+  return (
+    <div className="modal-overlay" onClick={handleOverlayClick} role="dialog" aria-modal="true">
+      <div className="modal">
+        <button className="modal-close" onClick={onClose} aria-label="Close">✕</button>
+        {loading || !movie ? (
+          <div style={{padding:'60px', textAlign:'center', color:'var(--text-muted)'}}>
+            <div style={{fontSize:40, marginBottom:12}}>🎬</div>
+            <span>Loading...</span>
+          </div>
+        ) : (
+          <>
+            <div className="modal-hero">
+              <div className="modal-poster">
+                {movie.Poster && movie.Poster !== 'N/A'
+                  ? <img src={movie.Poster} alt={movie.Title} />
+                  : <div className="poster-placeholder" style={{height:'100%'}}>🎬</div>
+                }
+              </div>
+              <div className="modal-info">
+                {movie.Type && (
+                  <div className="modal-type-tag">
+                    {movie.Type === 'series' ? '📺 TV Series' : movie.Type === 'episode' ? '📼 Episode' : '🎬 Film'}
+                  </div>
+                )}
+                <h2 className="modal-title">{movie.Title}</h2>
+                <div className="modal-year-runtime">
+                  {movie.Year && <span>📅 {movie.Year}</span>}
+                  {movie.Runtime && movie.Runtime !== 'N/A' && (
+                    <><div className="dot-sep" /><span>⏱ {movie.Runtime}</span></>
+                  )}
+                  {movie.Rated && movie.Rated !== 'N/A' && (
+                    <><div className="dot-sep" /><span>{movie.Rated}</span></>
+                  )}
+                </div>
+                {movie.imdbRating && movie.imdbRating !== 'N/A' && (
+                  <div className="modal-rating">⭐ {movie.imdbRating} <span style={{fontSize:12,fontWeight:400,color:'rgba(251,188,4,0.7)'}}>/ 10</span></div>
+                )}
+                {movie.Genre && movie.Genre !== 'N/A' && (
+                  <div className="modal-genres">
+                    {movie.Genre.split(', ').map(g => <div key={g} className="genre-tag">{g}</div>)}
+                  </div>
+                )}
+                {movie.Plot && movie.Plot !== 'N/A' && (
+                  <p className="modal-plot">{movie.Plot}</p>
+                )}
+              </div>
+            </div>
+            <div className="modal-body">
+              {[
+                ['Director', movie.Director],
+                ['Writers', movie.Writer],
+                ['Cast', movie.Actors],
+                ['Language', movie.Language],
+                ['Country', movie.Country],
+                ['Awards', movie.Awards],
+                ['Box Office', movie.BoxOffice],
+                ['Released', movie.Released],
+              ].filter(([, v]) => v && v !== 'N/A').map(([label, value]) => (
+                <div key={label} className="modal-detail-group">
+                  <div className="modal-detail-label">{label}</div>
+                  <div className="modal-detail-value">{value}</div>
+                </div>
+              ))}
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // Main app
 export default function App() {
   const [query, setQuery] = useState('');
@@ -95,10 +184,19 @@ export default function App() {
   const [error, setError] = useState('');
   const [filter, setFilter] = useState('All');
   const [searched, setSearched] = useState(false);
+  const inputRef = useRef(null);
+  const heroInputRef = useRef(null);
 
   // Load trending on mount
   useEffect(() => {
     fetchTrending().then(d => { setTrending(d); setLoading(false); });
+  }, []);
+
+  // Close modal on Escape key
+  useEffect(() => {
+    const handler = (e) => { if (e.key === 'Escape') setSelectedId(null); };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
   }, []);
 
   // Run search against OMDB
@@ -127,7 +225,7 @@ export default function App() {
     if (searched && query.trim()) handleSearch(query, f);
   };
 
-  // Reset to home
+  // Reset to home (logo click / clear button)
   const handleClear = () => {
     setQuery('');
     setResults([]);
@@ -141,9 +239,10 @@ export default function App() {
 
   return (
     <div className="app">
+      {/* Header */}
       <header className="header">
         <div className="header-inner">
-          <div className="logo" onClick={handleClear} style={{cursor:'pointer'}}>
+          <div className="logo" onClick={handleClear} style={{cursor:'pointer'}} title="Go to Home">
             <div className="logo-icon">🎬</div>
             <div className="logo-text">Movie<span>Finder</span></div>
           </div>
@@ -151,54 +250,82 @@ export default function App() {
             <div className="search-input-group">
               <span className="search-icon">🔍</span>
               <input
+                ref={inputRef}
                 className="search-input"
                 type="text"
                 placeholder="Search movies, series…"
                 value={query}
                 onChange={e => setQuery(e.target.value)}
                 onKeyDown={handleKeyDown}
+                aria-label="Search movies"
               />
-              <button className="search-btn" onClick={() => handleSearch()} id="header-search-btn">Search</button>
+              <button className="search-btn" onClick={() => handleSearch()} id="header-search-btn">
+                Search
+              </button>
             </div>
           </div>
         </div>
       </header>
 
       <main className="main">
+        {/* Hero — only shown before any search */}
         {!searched && (
           <section className="hero">
             <div className="hero-badge">Powered by OMDB</div>
-            <h1 className="hero-title">Find Your Next<br /><span className="highlight">Favorite Movie</span></h1>
-            <p className="hero-subtitle">Search millions of movies, TV series, and more. Instantly.</p>
+            <h1 className="hero-title">
+              Find Your Next<br />
+              <span className="highlight">Favorite Movie</span>
+            </h1>
+            <p className="hero-subtitle">
+              Search millions of movies, TV series, and more. Instantly.
+            </p>
             <div className="hero-search-wrapper">
               <div className="hero-search-input-group">
                 <input
+                  ref={heroInputRef}
                   className="hero-search-input"
                   type="text"
                   placeholder='Try "Inception", "Breaking Bad"…'
                   value={query}
                   onChange={e => setQuery(e.target.value)}
                   onKeyDown={handleKeyDown}
+                  aria-label="Search movies hero"
                   id="hero-search-input"
                 />
-                <button className="hero-search-btn" onClick={() => handleSearch()} id="hero-search-btn">🔍 Search</button>
+                <button className="hero-search-btn" onClick={() => handleSearch()} id="hero-search-btn">
+                  🔍 Search
+                </button>
               </div>
             </div>
           </section>
         )}
 
+        {/* Filter bar — only shown after search */}
         {searched && (
           <div className="filter-bar">
             <span className="filter-label">Filter:</span>
             {FILTERS.map(f => (
-              <button key={f} className={`filter-btn${filter === f ? ' active' : ''}`} onClick={() => handleFilterChange(f)}>
+              <button
+                key={f}
+                className={`filter-btn${filter === f ? ' active' : ''}`}
+                onClick={() => handleFilterChange(f)}
+                id={`filter-${f}`}
+              >
                 {f === 'All' ? '🎞 All' : f === 'movie' ? '🎬 Movies' : f === 'series' ? '📺 Series' : '📼 Episodes'}
               </button>
             ))}
-            <button className="filter-btn" onClick={handleClear} style={{marginLeft:'auto'}} id="clear-search-btn">✕ Clear</button>
+            <button
+              className="filter-btn"
+              onClick={handleClear}
+              style={{marginLeft:'auto', color:'var(--text-muted)'}}
+              id="clear-search-btn"
+            >
+              ✕ Clear
+            </button>
           </div>
         )}
 
+        {/* Section title + result count */}
         <div className="section-header">
           <h2 className="section-title">
             {searched ? '🔎' : '🔥'} {sectionTitle}
@@ -208,6 +335,7 @@ export default function App() {
           </h2>
         </div>
 
+        {/* Movie grid / loading / empty states */}
         {(loading && !searched) || searchLoading ? (
           <Skeleton />
         ) : error ? (
@@ -215,6 +343,12 @@ export default function App() {
             <span className="state-icon">😕</span>
             <div className="state-title">{error}</div>
             <div className="state-subtitle">Try a different keyword or check your spelling.</div>
+          </div>
+        ) : displayMovies.length === 0 ? (
+          <div className="state-container">
+            <span className="state-icon">🍿</span>
+            <div className="state-title">Type something to search</div>
+            <div className="state-subtitle">Start typing in the search bar to discover movies and TV shows.</div>
           </div>
         ) : (
           <div className="movie-grid">
@@ -224,6 +358,11 @@ export default function App() {
           </div>
         )}
       </main>
+
+      {/* Movie detail modal */}
+      {selectedId && (
+        <MovieModal id={selectedId} onClose={() => setSelectedId(null)} />
+      )}
     </div>
   );
 }
