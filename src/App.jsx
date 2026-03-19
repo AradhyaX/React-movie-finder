@@ -37,13 +37,20 @@ async function fetchTrending() {
 }
 
 // Single movie card
-function MovieCard({ movie, onClick }) {
+function MovieCard({ movie, onClick, isFavorite, onToggleFavorite }) {
   const hasPoster = movie.Poster && movie.Poster !== 'N/A';
   const type = movie.Type || 'movie';
 
   return (
     <div className="movie-card" onClick={() => onClick(movie.imdbID || movie.id)}>
       <div className="movie-card-poster">
+        <div 
+          className={`fav-btn ${isFavorite ? 'active' : ''}`} 
+          onClick={(e) => onToggleFavorite(e, movie)}
+          title={isFavorite ? "Remove from Watchlist" : "Add to Watchlist"}
+        >
+          {isFavorite ? '❤️' : '🤍'}
+        </div>
         {hasPoster ? (
           <img src={movie.Poster} alt={movie.Title} loading="lazy" />
         ) : (
@@ -185,6 +192,12 @@ export default function App() {
   const [error, setError] = useState('');
   const [filter, setFilter] = useState('All');
   const [searched, setSearched] = useState(false);
+  const [favorites, setFavorites] = useState(() => {
+    const saved = localStorage.getItem('cinewave_favorites');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [showWatchlist, setShowWatchlist] = useState(false);
+
   const inputRef = useRef(null);
   const heroInputRef = useRef(null);
 
@@ -192,6 +205,21 @@ export default function App() {
   useEffect(() => {
     fetchTrending().then(d => { setTrending(d); setLoading(false); });
   }, []);
+
+  // Save favorites to localStorage
+  useEffect(() => {
+    localStorage.setItem('cinewave_favorites', JSON.stringify(favorites));
+  }, [favorites]);
+
+  // Toggle Watchlist favorite
+  const toggleFavorite = (e, movie) => {
+    e.stopPropagation();
+    setFavorites(prev => {
+      const isFav = prev.some(f => (f.imdbID || f.id) === (movie.imdbID || movie.id));
+      if (isFav) return prev.filter(f => (f.imdbID || f.id) !== (movie.imdbID || movie.id));
+      return [...prev, movie];
+    });
+  };
 
   // Close modal on Escape key
   useEffect(() => {
@@ -207,6 +235,7 @@ export default function App() {
     setSearchLoading(true);
     setError('');
     setSearched(true);
+    setShowWatchlist(false);
     try {
       const data = await fetchBySearch(trimmed, f);
       setResults(data);
@@ -233,10 +262,11 @@ export default function App() {
     setSearched(false);
     setError('');
     setFilter('All');
+    setShowWatchlist(false);
   };
 
-  const displayMovies = searched ? results : trending;
-  const sectionTitle = searched ? `Results for "${query}"` : 'Trending Now';
+  const displayMovies = showWatchlist ? favorites : (searched ? results : trending);
+  const sectionTitle = showWatchlist ? 'My Watchlist' : (searched ? `Results for "${query}"` : 'Trending Now');
 
   return (
     <div className="app">
@@ -266,12 +296,21 @@ export default function App() {
               </button>
             </div>
           </div>
+
+          <button 
+            className={`watchlist-toggle ${showWatchlist ? 'active' : ''}`}
+            onClick={() => { setShowWatchlist(!showWatchlist); setSearched(false); setError(''); }}
+            title="My Watchlist"
+          >
+            {favorites.length > 0 && <span className="watchlist-count">{favorites.length}</span>}
+            ⭐ Watchlist
+          </button>
         </div>
       </header>
 
       <main className="main">
         {/* Hero — only shown before any search */}
-        {!searched && (
+        {!searched && !showWatchlist && (
           <section className="hero">
             <div className="hero-badge">CineWave · Powered by IMDB</div>
             <h1 className="hero-title">
@@ -348,9 +387,9 @@ export default function App() {
           </div>
         ) : displayMovies.length === 0 ? (
           <div className="state-container">
-            <span className="state-icon">🍿</span>
-            <div className="state-title">Type something to search</div>
-            <div className="state-subtitle">Start typing in the search bar to discover movies and TV shows.</div>
+            <span className="state-icon">{showWatchlist ? '📭' : '🍿'}</span>
+            <div className="state-title">{showWatchlist ? 'Your Watchlist is empty' : 'Type something to search'}</div>
+            <div className="state-subtitle">{showWatchlist ? 'Add movies you want to watch later by clicking the heart icon on any poster.' : 'Start typing in the search bar to discover movies and TV shows.'}</div>
           </div>
         ) : (
           <div className="movie-grid">
@@ -359,6 +398,8 @@ export default function App() {
                 key={m.imdbID || m.Title}
                 movie={m}
                 onClick={setSelectedId}
+                isFavorite={favorites.some(f => (f.imdbID || f.id) === (m.imdbID || m.id))}
+                onToggleFavorite={toggleFavorite}
               />
             ))}
           </div>
