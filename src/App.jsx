@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import './index.css';
 
+// API config
 const API_KEY = 'trilogy';
 const BASE_URL = 'https://www.omdbapi.com/';
 
@@ -33,23 +34,6 @@ async function fetchTrending() {
   return results
     .filter(r => r.status === 'fulfilled' && r.value.Response === 'True')
     .map(r => r.value);
-}
-
-// Shimmer loading placeholder grid
-function Skeleton() {
-  return (
-    <div className="loading-grid" aria-label="Loading movies">
-      {Array.from({length: 12}).map((_, i) => (
-        <div key={i} className="skeleton-card">
-          <div className="skeleton-poster" />
-          <div className="skeleton-info">
-            <div className="skeleton-line" />
-            <div className="skeleton-line short" />
-          </div>
-        </div>
-      ))}
-    </div>
-  );
 }
 
 // Single movie card
@@ -85,6 +69,23 @@ function MovieCard({ movie, onClick }) {
           }
         </div>
       </div>
+    </div>
+  );
+}
+
+// Shimmer loading placeholder grid
+function Skeleton() {
+  return (
+    <div className="loading-grid" aria-label="Loading movies">
+      {Array.from({length: 12}).map((_, i) => (
+        <div key={i} className="skeleton-card">
+          <div className="skeleton-poster" />
+          <div className="skeleton-info">
+            <div className="skeleton-line" />
+            <div className="skeleton-line short" />
+          </div>
+        </div>
+      ))}
     </div>
   );
 }
@@ -244,8 +245,9 @@ export default function App() {
         <div className="header-inner">
           <div className="logo" onClick={handleClear} style={{cursor:'pointer'}} title="Go to Home">
             <div className="logo-icon">🎬</div>
-            <div className="logo-text">Movie<span>Finder</span></div>
+            <div className="logo-text">Cine<span>Wave</span></div>
           </div>
+
           <div className="search-wrapper">
             <div className="search-input-group">
               <span className="search-icon">🔍</span>
@@ -271,7 +273,7 @@ export default function App() {
         {/* Hero — only shown before any search */}
         {!searched && (
           <section className="hero">
-            <div className="hero-badge">Powered by OMDB</div>
+            <div className="hero-badge">CineWave · Powered by IMDB</div>
             <h1 className="hero-title">
               Find Your Next<br />
               <span className="highlight">Favorite Movie</span>
@@ -353,7 +355,11 @@ export default function App() {
         ) : (
           <div className="movie-grid">
             {displayMovies.map(m => (
-              <MovieCard key={m.imdbID || m.Title} movie={m} onClick={setSelectedId} />
+              <MovieCard
+                key={m.imdbID || m.Title}
+                movie={m}
+                onClick={setSelectedId}
+              />
             ))}
           </div>
         )}
